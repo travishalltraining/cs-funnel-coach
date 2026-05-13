@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -61,24 +61,26 @@ const churnInsight = (rate) => {
     return {
       severity: "red",
       headline: "Churn is bleeding LTV",
-      detail: `At ${rate}% monthly churn, the average member lasts roughly ${lifetimeMonths} months. Every percentage point you reduce churn translates straight into LTV. The four places to look first: onboarding consistency in the first 30 days, community/accountability infrastructure in days 30–90, billing failure recovery (cards declining is a silent killer), and a formal 60-day retention check-in with a coach (not a survey).`,
+      detail: `At ${rate}% monthly churn, the average member lasts roughly ${lifetimeMonths} months. Every percentage point you reduce churn translates straight into LTV — and the first step is figuring out WHEN they're leaving and WHY. Don't assume; look at the data.`,
       tactics: [
-        "Audit the first-30-day experience. New members who don't feel coached out the gate cancel inside 90 days.",
-        "Install a 60-day retention conversation as a calendar-driven SOP. This is the single highest-ROI retention move at this churn level.",
-        "Build a billing failure recovery cadence — failed cards that auto-cancel are pure leakage. Stripe/GHL can dunning these automatically.",
-        "Map the community/accountability touchpoints between days 30 and 90. If there isn't one, that's the gap.",
+        "Pull the client's cancellation data and find the churn cliff. Is it month 1? Month 3? Month 6+? Whatever month shows the spike is the conversation point — what's happening (or NOT happening) for the member at that stage that breaks the value perception?",
+        "Once you know the timing, work backward: what touchpoint or experience needs to land BEFORE that cliff to keep them seeing value? If most leave at month 6, the question becomes 'what do we need at month 3 and month 5 to reinforce why they're here?'",
+        "If they don't have a 30/60/90-day onboarding plan, build one. Members who feel coached in the first 90 days stick — even ones who'd otherwise be marginal fits.",
+        "Retention tactics that compound over time: consistent social outings (member events, community workouts), small recognition gifts, milestone callouts (lifting PRs, weight-loss markers, anniversary of joining), birthday acknowledgments. These cost almost nothing and build a 'this gym sees me' feeling.",
+        "Audit billing failure recovery — failed cards that auto-cancel are silent churn. Even one preventable cancellation per month adds up across a year.",
       ],
     };
   }
   if (health === "yellow") {
     return {
       severity: "yellow",
-      headline: "Churn is workable — but leaving money on the table",
-      detail: `At ${rate}%, average member lifetime is around ${lifetimeMonths} months. The team is keeping members through the early grind, but they're walking off at the 60–90 day mark — the highest-leverage retention window. A formal mid-cycle check-in (with a coach, not a survey) is the single highest-ROI move. Pulling churn down 1–2 points compounds hard on LTV.`,
+      headline: "Churn is workable — but possibly leaving money on the table",
+      detail: `At ${rate}%, average member lifetime is around ${lifetimeMonths} months. The team is keeping members through the early grind, but pulling churn down 1–2 points has outsized LTV impact. The play here is diagnostic before prescriptive — find out when members ARE leaving, then build the touchpoint that keeps them past that mark.`,
       tactics: [
-        "Install a 60-day check-in with a named coach. Calendar-driven, not 'when we remember.'",
+        "Look at the client's actual cancellation pattern. Where's the cliff? Month 3? 6? 12? Once you know the timing, build a coach-led touchpoint that lands a month BEFORE that cliff. The goal: reinforce value at the exact moment it starts to fade.",
+        "If they don't have a 30/60/90-day onboarding plan, build one — that's table stakes and it covers the highest-risk early window.",
+        "Compounding retention tactics: consistent social outings (member events, community workouts), small gifts/recognition, milestone callouts (PRs, weight goals, anniversaries), birthday acknowledgments. Low cost, high stickiness.",
         "Audit billing failure recovery — even one declined-card cancellation per month adds up over a year.",
-        "Look at the day-30 experience. Members who feel coached at the 30-day mark stick.",
       ],
     };
   }
@@ -219,21 +221,41 @@ const BOTTLENECK_RECS = {
 
 // ============================================================
 // CALLS PER LEAD INSIGHT
+// `doubleDial` (true/false/null) shifts the tactics — if they're not
+// double-dialing, the 40%-carrier-filtering warning is added up front
 // ============================================================
-const callsInsight = (cpl) => {
+const callsInsight = (cpl, doubleDial) => {
   if (cpl <= 0) return null;
+
+  // Shared tactic blocks
+  const doubleDialTactic = (() => {
+    if (doubleDial === false) {
+      return "Install the Double Dial — if no answer on the first call, hang up and call right back. Carriers filter unknown numbers aggressively (up to 40% of calls don't even ring through), and the second back-to-back call breaks past that filter. This alone usually adds 10–20% to connect rates with zero new infrastructure.";
+    }
+    if (doubleDial === true) {
+      return "Double Dial is already in play — protect that standard. Every dial should be a hang-up-and-call-back if no answer on the first ring.";
+    }
+    return "Double Dial every attempt — call once, hang up if no answer, immediately call back. Carriers filter unknown numbers (up to 40% of calls don't ring through), and the back-to-back dial breaks the filter.";
+  })();
+
+  const vmTextTactic =
+    "If they don't answer, alternate voicemail and text across attempts. Leaving no voicemail makes the team look like spam or a cold caller — voicemails signal a real human trying to connect. Texts pick up the leads who'd rather not talk on the phone first.";
+
+  const threeByThree =
+    "Cadence target: 2×3 is the floor (2 calls per day for the first 3 days), 3×3 is the gold standard (3 calls per day for the first 3 days). Every dial should be a Double Dial.";
+
   if (cpl < 4) {
     return {
       severity: "red",
       headline: "RED — leads are being under-worked",
       detail:
-        "Per the GMM Follow-Up doc, most conversions happen after multiple touches — not after the first call. At fewer than 4 calls per lead, leads who would have converted with persistence are being abandoned.",
+        "Per the GMM Follow-Up doc, most conversions happen after multiple touches — not after the first call. At fewer than 4 calls per lead, leads who would have converted with persistence are being abandoned. The cadence target is 2×3 minimum (2 calls per day for the first 3 days) — 3×3 is the gold standard.",
       tactics: [
-        "Install the 3×3 Method as the floor: 3 calls per day for 3 days after every new lead.",
-        "Use the Double Dial: call once, hang up if voicemail, immediately call back. Carriers and humans both respond better to back-to-back calls.",
+        threeByThree,
+        doubleDialTactic,
+        vmTextTactic,
         "Send an immediate auto-text on opt-in. Multi-channel stacking starts before the first call lands.",
-        "Build it into the CRM as required steps so reps can't skip ahead.",
-        "Stack contacts: calls + texts + automated email all working together in the first 72 hours.",
+        "Build the cadence into the CRM as required steps so reps can't skip ahead.",
       ],
     };
   }
@@ -242,12 +264,12 @@ const callsInsight = (cpl) => {
       severity: "yellow",
       headline: "Yellow — below the persistence benchmark",
       detail:
-        "Effort's there but not enough. Push for 6+ attempts before tagging a lead cold. Per the playbook, ad-side recommendations can still be pulled here on a case-by-case basis — but coaching cadence is the more reliable lever right now.",
+        "Effort's there but not enough. Push for 6+ attempts before tagging a lead cold. The floor is 2×3 — 2 calls per day across the first 3 days. The gold standard is 3×3 (3 calls per day). Per the playbook, ad-side recommendations can still be pulled here case-by-case, but cadence is the more reliable lever right now.",
       tactics: [
-        "Move to full 3×3 Method instead of 2×3 if you're below 6.",
-        "Use the Double Dial on every attempt — call, hang up on voicemail, immediately call back.",
+        threeByThree,
+        doubleDialTactic,
+        vmTextTactic,
         "Send an immediate auto-text on opt-in. Buys time and signals you're real before the first call.",
-        "Send a text after every missed call. The text alone often restarts the conversation.",
       ],
     };
   }
@@ -256,8 +278,15 @@ const callsInsight = (cpl) => {
       severity: "green",
       headline: "Green — healthy persistence",
       detail:
-        "You're in the optimal range. Continue the discipline. Next gain is in quality — right times of day, right messaging, multi-channel touches between calls.",
-      tactics: null,
+        "You're in the optimal range. Continue the discipline. The next gain is in quality — right times of day, right messaging, multi-channel touches between calls.",
+      tactics:
+        doubleDial === false
+          ? [
+              doubleDialTactic,
+              vmTextTactic,
+              "Volume is good but the connect rate could be higher — installing Double Dial is the free upgrade.",
+            ]
+          : null,
     };
   }
   return {
@@ -265,7 +294,10 @@ const callsInsight = (cpl) => {
     headline: "Green — but watch for diminishing returns",
     detail:
       "Persistence is healthy. At 10+ calls per lead, watch for list-quality issues, contact-method gaps, or wrong-time-of-day calling. Consider pivoting unresponsive leads to a reactivation track sooner.",
-    tactics: null,
+    tactics:
+      doubleDial === false
+        ? [doubleDialTactic, vmTextTactic]
+        : null,
   };
 };
 
@@ -941,23 +973,49 @@ const detectBuckets = ({
 };
 
 // Determine the priority bucket — execution beats funnel, funnel beats ad/reactivation
-const prioritizeBucket = (activeBuckets) => {
+// Pick the primary bucket by SEVERITY (largest gap to green), not by a
+// fixed priority list. This keeps the bucket summary aligned with the
+// bottleneck card — whichever lever is bleeding the most is the one we
+// coach first.
+const prioritizeBucket = (activeBuckets, data, gate) => {
   if (!activeBuckets.length) return null;
-  const priority = [
-    "speedToLead",
-    "callVolume",
-    "booking",
-    "showRate",
-    "close",
-    "feo",
-    "lowLeadFlow",
-    "adQuality",
-    "reactivation",
-  ];
-  for (const key of priority) {
-    if (activeBuckets.includes(key)) return key;
-  }
-  return activeBuckets[0];
+  const scoreBucket = (key) => {
+    switch (key) {
+      case "speedToLead":
+        if (gate?.speedRed) return 30;
+        if (gate?.speedYellow) return 12;
+        return 0;
+      case "callVolume":
+        if (gate?.callsRed) return 25;
+        if (gate?.callsYellow) return 10;
+        return 0;
+      case "booking":
+        return Math.max(0, BENCHMARK_TARGETS.booking - (data?.bookingRate || 0));
+      case "showRate":
+        return Math.max(0, BENCHMARK_TARGETS.show - (data?.showRate || 0));
+      case "close":
+        return Math.max(0, BENCHMARK_TARGETS.close - (data?.closeRate || 0));
+      case "feo":
+        return Math.max(
+          0,
+          BENCHMARK_TARGETS.feoClose - (data?.feoCloseRate || 0)
+        );
+      case "lowLeadFlow":
+        return 15; // moderate — only fires when leads are extremely thin
+      case "adQuality":
+        return 5; // lowest — only when execution + funnel are clean
+      case "reactivation":
+        return data?.weeksSinceReactivation > 12 ? 20 : 5;
+      case "healthyFunnel":
+        return 0;
+      default:
+        return 0;
+    }
+  };
+  const sorted = [...activeBuckets].sort(
+    (a, b) => scoreBucket(b) - scoreBucket(a)
+  );
+  return sorted[0];
 };
 
 // Project the funnel forward — what would the counts look like if the given
@@ -991,6 +1049,16 @@ const projectFunnel = (data, fixedKeys) => {
     sold = showed * (closeRate / 100);
   }
 
+  // Money math — same formulas as the Current Money Snapshot, fed with
+  // the projected counts. Lets the Projected Impact card show $ deltas.
+  const feoRevenue = data.feoIsPaid ? feoSales * data.feoPrice : 0;
+  const frontEndCash = feoRevenue + sold * data.membershipPrice;
+  const ltvPerMember =
+    data.churnRate > 0 && data.membershipPrice > 0
+      ? data.membershipPrice / (data.churnRate / 100)
+      : 0;
+  const totalLtv = sold * ltvPerMember;
+
   return {
     leads,
     booked,
@@ -1002,6 +1070,10 @@ const projectFunnel = (data, fixedKeys) => {
     closeRate,
     feoCloseRate,
     overallRate: leads > 0 ? (sold / leads) * 100 : 0,
+    feoRevenue,
+    frontEndCash,
+    ltvPerMember,
+    totalLtv,
   };
 };
 
@@ -1485,6 +1557,7 @@ export default function CSFunnelCoach() {
   const [booked, setBooked] = useState("");
   const [showed, setShowed] = useState("");
   const [usesFeo, setUsesFeo] = useState(null);
+  const [doubleDial, setDoubleDial] = useState(null); // null | true | false
   const [feoSales, setFeoSales] = useState("");
   const [sold, setSold] = useState("");
   const [calls, setCalls] = useState("");
@@ -1498,6 +1571,7 @@ export default function CSFunnelCoach() {
   const [feoType, setFeoType] = useState(""); // "free_trial" | "challenge" | "other" | ""
   const [simOverrides, setSimOverrides] = useState({}); // {booking: 30, show: 70, ...}
   const [submitted, setSubmitted] = useState(false);
+  const resultsRef = useRef(null);
 
   const data = useMemo(() => {
     const l = parseFloat(leads) || 0;
@@ -1645,7 +1719,9 @@ export default function CSFunnelCoach() {
 
   const speedInsight = submitted && speed ? SPEED_DATA[speed] : null;
   const cplInsight =
-    submitted && data.callsPerLead > 0 ? callsInsight(data.callsPerLead) : null;
+    submitted && data.callsPerLead > 0
+      ? callsInsight(data.callsPerLead, doubleDial)
+      : null;
   const reactivationInsight = submitted
     ? reactivationStatus(data.weeksSinceReactivation)
     : null;
@@ -1664,8 +1740,8 @@ export default function CSFunnelCoach() {
   }, [submitted, data, speed, hasComplaint, selectedComplaints, gate]);
 
   const primaryBucket = useMemo(
-    () => prioritizeBucket(activeBuckets),
-    [activeBuckets]
+    () => prioritizeBucket(activeBuckets, data, gate),
+    [activeBuckets, data, gate]
   );
 
   const canSubmit = leads !== "" && parseFloat(leads) > 0;
@@ -1681,7 +1757,23 @@ export default function CSFunnelCoach() {
   };
 
   const handleSubmit = () => {
-    if (canSubmit) setSubmitted(true);
+    if (!canSubmit) return;
+    // Wipe simulator slider overrides so the projection panel reflects the
+    // newly-entered current rates — otherwise a re-run looks like nothing
+    // changed because the simulator is still showing the last set of slider
+    // positions.
+    setSimOverrides({});
+    setSubmitted(true);
+    // Scroll to results so the coach visibly sees the re-run happen
+    // (a couple of ms after state commits)
+    setTimeout(() => {
+      if (resultsRef.current) {
+        resultsRef.current.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      }
+    }, 50);
   };
 
   const handleReset = () => {
@@ -1689,6 +1781,7 @@ export default function CSFunnelCoach() {
     setBooked("");
     setShowed("");
     setUsesFeo(null);
+    setDoubleDial(null);
     setFeoSales("");
     setSold("");
     setCalls("");
@@ -1912,6 +2005,44 @@ export default function CSFunnelCoach() {
             )}
           </SectionCard>
 
+          {/* REVENUE & RETENTION */}
+          <SectionCard
+            title="Revenue & Retention"
+            description="Pricing and churn data so we can show this client the dollar impact of fixing their funnel — not just a conversion-rate improvement."
+          >
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {usesFeo === true && (
+                <NumberInput
+                  label="FEO Sale Amount"
+                  icon={Ticket}
+                  value={feoPrice}
+                  onChange={setFeoPrice}
+                  placeholder="0"
+                  prefix="$"
+                  tooltip="What the client charges for the Front End Offer. If the FEO is FREE (no money collected at trial sign-up), leave this at 0 — we'll skip FEO revenue in the math and treat the close as happening at membership."
+                />
+              )}
+              <NumberInput
+                label="Membership Sale Amount"
+                icon={DollarSign}
+                value={membershipPrice}
+                onChange={setMembershipPrice}
+                placeholder="0"
+                prefix="$"
+                tooltip="Average monthly membership price the client charges. Used for first-month revenue and LTV calculations. If they have multiple tiers, use a sensible blended average."
+              />
+              <NumberInput
+                label="Current Churn Rate"
+                icon={RotateCw}
+                value={churnRate}
+                onChange={setChurnRate}
+                placeholder="8"
+                prefix="%"
+                tooltip="Monthly churn — what % of members cancel each month. If the client doesn't know, default to 8% and adjust live in the conversation. You'll also have a slider on the simulator side to play with this in real-time."
+              />
+            </div>
+          </SectionCard>
+
           {/* EFFORT & SPEED */}
           <SectionCard
             title="Effort & Speed"
@@ -1956,43 +2087,57 @@ export default function CSFunnelCoach() {
                 </select>
               </label>
             </div>
-          </SectionCard>
 
-          {/* REVENUE & RETENTION */}
-          <SectionCard
-            title="Revenue & Retention"
-            description="Pricing and churn data so we can show this client the dollar impact of fixing their funnel — not just a conversion-rate improvement."
-          >
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {usesFeo === true && (
-                <NumberInput
-                  label="FEO Sale Amount"
-                  icon={Ticket}
-                  value={feoPrice}
-                  onChange={setFeoPrice}
-                  placeholder="0"
-                  prefix="$"
-                  tooltip="What the client charges for the Front End Offer. If the FEO is FREE (no money collected at trial sign-up), leave this at 0 — we'll skip FEO revenue in the math and treat the close as happening at membership."
-                />
-              )}
-              <NumberInput
-                label="Membership Sale Amount"
-                icon={DollarSign}
-                value={membershipPrice}
-                onChange={setMembershipPrice}
-                placeholder="0"
-                prefix="$"
-                tooltip="Average monthly membership price the client charges. Used for first-month revenue and LTV calculations. If they have multiple tiers, use a sensible blended average."
-              />
-              <NumberInput
-                label="Current Churn Rate"
-                icon={RotateCw}
-                value={churnRate}
-                onChange={setChurnRate}
-                placeholder="8"
-                prefix="%"
-                tooltip="Monthly churn — what % of members cancel each month. If the client doesn't know, default to 8% and adjust live in the conversation. You'll also have a slider on the simulator side to play with this in real-time."
-              />
+            {/* Double Dial toggle */}
+            <div className="mt-5 border border-slate-200 rounded-lg p-4 bg-slate-50">
+              <div className="flex items-start gap-4 flex-wrap">
+                <div className="flex-1 min-w-[240px]">
+                  <p
+                    className="font-bold text-sm mb-1 flex items-center"
+                    style={{
+                      fontFamily: '"Archivo", sans-serif',
+                      color: "#0c1a3d",
+                    }}
+                  >
+                    Does the team Double Dial?
+                    <InfoTooltip>
+                      Double Dial = if a lead doesn't answer on the first call, hang up and call right back immediately. If they still don't answer, leave a voicemail or send a text. The reason it matters: up to 40% of calls don't even show on a consumer's phone due to carrier filtering and Do Not Disturb settings. The second back-to-back call breaks past the filter.
+                    </InfoTooltip>
+                  </p>
+                  <p
+                    className="text-sm text-stone-600"
+                    style={{ fontFamily: '"Archivo", sans-serif' }}
+                  >
+                    The single highest-ROI tweak to outbound cadence — and free.
+                  </p>
+                </div>
+                <div className="flex gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setDoubleDial(true)}
+                    className={`px-5 py-2 text-sm font-bold uppercase tracking-wider rounded transition-colors ${
+                      doubleDial === true
+                        ? "bg-blue-700 text-white"
+                        : "bg-white text-stone-700 border border-slate-300 hover:border-blue-700"
+                    }`}
+                    style={{ fontFamily: '"Archivo", sans-serif' }}
+                  >
+                    Yes
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDoubleDial(false)}
+                    className={`px-5 py-2 text-sm font-bold uppercase tracking-wider rounded transition-colors ${
+                      doubleDial === false
+                        ? "bg-blue-700 text-white"
+                        : "bg-white text-stone-700 border border-slate-300 hover:border-blue-700"
+                    }`}
+                    style={{ fontFamily: '"Archivo", sans-serif' }}
+                  >
+                    No
+                  </button>
+                </div>
+              </div>
             </div>
           </SectionCard>
 
@@ -2148,7 +2293,7 @@ export default function CSFunnelCoach() {
 
         {/* RESULTS */}
         {submitted && data.leads > 0 && (
-          <section className="space-y-6">
+          <section ref={resultsRef} className="space-y-6 scroll-mt-6">
             {/* RESULTS EYEBROW DIVIDER */}
             <div className="flex items-center gap-3 pt-2">
               <div className="h-1 w-16 bg-yellow-300" />
@@ -2343,6 +2488,113 @@ export default function CSFunnelCoach() {
                       isLast
                     />
                   )}
+                </div>
+
+                {/* Current State panel — mirrors the Simulator's Result panel
+                    so the coach can do a true side-by-side comparison */}
+                <div className="mt-5 bg-slate-50 border border-slate-300 rounded-lg p-5">
+                  <p
+                    className="text-xs uppercase tracking-wider text-slate-600 font-bold mb-3"
+                    style={{ fontFamily: '"Archivo", sans-serif' }}
+                  >
+                    Current Result
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <p
+                        className="text-xs text-stone-600 mb-1"
+                        style={{ fontFamily: '"Archivo", sans-serif' }}
+                      >
+                        Lead-to-Close
+                      </p>
+                      <p
+                        className="text-3xl"
+                        style={{
+                          fontFamily: '"JetBrains Mono", monospace',
+                          fontWeight: 600,
+                          color: "#0c1a3d",
+                        }}
+                      >
+                        {data.overallRate.toFixed(1)}%
+                      </p>
+                    </div>
+                    <div>
+                      <p
+                        className="text-xs text-stone-600 mb-1"
+                        style={{ fontFamily: '"Archivo", sans-serif' }}
+                      >
+                        {data.feoOn ? "Memberships" : "Sold"}
+                      </p>
+                      <p
+                        className="text-3xl"
+                        style={{
+                          fontFamily: '"JetBrains Mono", monospace',
+                          fontWeight: 600,
+                          color: "#0c1a3d",
+                        }}
+                      >
+                        {data.sold.toLocaleString()}
+                      </p>
+                    </div>
+                    {data.membershipPrice > 0 && (
+                      <>
+                        <div className="md:col-span-2 border-t border-slate-200 pt-3 mt-1">
+                          <p
+                            className="text-xs uppercase tracking-wider text-slate-600 font-bold mb-2"
+                            style={{ fontFamily: '"Archivo", sans-serif' }}
+                          >
+                            Money Side
+                          </p>
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-1 mb-1">
+                            <p
+                              className="text-xs text-stone-600"
+                              style={{ fontFamily: '"Archivo", sans-serif' }}
+                            >
+                              30-Day Cash
+                            </p>
+                            <InfoTooltip>
+                              Cash collected from this lead cohort in the first 30 days. Includes paid FEO sales (if the FEO is paid) plus first-month membership revenue. This is the front-end money the funnel produces — what the client actually sees in the bank now.
+                            </InfoTooltip>
+                          </div>
+                          <p
+                            className="text-3xl"
+                            style={{
+                              fontFamily: '"JetBrains Mono", monospace',
+                              fontWeight: 600,
+                              color: "#0c1a3d",
+                            }}
+                          >
+                            ${Math.round(data.frontEndCash).toLocaleString()}
+                          </p>
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-1 mb-1">
+                            <p
+                              className="text-xs text-stone-600"
+                              style={{ fontFamily: '"Archivo", sans-serif' }}
+                            >
+                              Total LTV
+                            </p>
+                            <InfoTooltip>
+                              Theoretical lifetime value of this cohort of members if churn stays at the current rate. Math: monthly membership price ÷ churn rate = LTV per member. Multiply by the number sold for cohort total. It's a forecast, not money in hand — but it's what shows the long-term value of every new member the funnel produces.
+                            </InfoTooltip>
+                          </div>
+                          <p
+                            className="text-3xl"
+                            style={{
+                              fontFamily: '"JetBrains Mono", monospace',
+                              fontWeight: 600,
+                              color: "#0c1a3d",
+                            }}
+                          >
+                            ${Math.round(data.totalLtv).toLocaleString()}
+                          </p>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
               </SectionCard>
 
@@ -2806,12 +3058,17 @@ export default function CSFunnelCoach() {
                     </p>
                   </div>
                   <div>
-                    <p
-                      className="text-xs text-stone-500 uppercase tracking-wider mb-1"
-                      style={{ fontFamily: '"Archivo", sans-serif' }}
-                    >
-                      30-Day Cash
-                    </p>
+                    <div className="flex items-center gap-1 mb-1">
+                      <p
+                        className="text-xs text-stone-500 uppercase tracking-wider"
+                        style={{ fontFamily: '"Archivo", sans-serif' }}
+                      >
+                        30-Day Cash
+                      </p>
+                      <InfoTooltip>
+                        Cash collected from this lead cohort in the first 30 days. Includes paid FEO sales (if the FEO is paid) plus first-month membership revenue. This is the front-end money the funnel produces — what the client actually sees in the bank now.
+                      </InfoTooltip>
+                    </div>
                     <p
                       className="text-3xl md:text-4xl"
                       style={{
@@ -2835,12 +3092,17 @@ export default function CSFunnelCoach() {
                     </p>
                   </div>
                   <div>
-                    <p
-                      className="text-xs text-stone-500 uppercase tracking-wider mb-1"
-                      style={{ fontFamily: '"Archivo", sans-serif' }}
-                    >
-                      Total LTV
-                    </p>
+                    <div className="flex items-center gap-1 mb-1">
+                      <p
+                        className="text-xs text-stone-500 uppercase tracking-wider"
+                        style={{ fontFamily: '"Archivo", sans-serif' }}
+                      >
+                        Total LTV
+                      </p>
+                      <InfoTooltip>
+                        Theoretical lifetime value of this cohort of members if churn stays at the current rate. Math: monthly membership price ÷ churn rate = LTV per member. Multiply by the number sold for cohort total. It's a forecast, not money in hand — but it's what shows the long-term value of every new member the funnel produces.
+                      </InfoTooltip>
+                    </div>
                     <p
                       className="text-3xl md:text-4xl"
                       style={{
@@ -3403,49 +3665,149 @@ export default function CSFunnelCoach() {
                     </div>
 
                     {/* Bottom-line delta */}
-                    <div className="bg-emerald-50 border border-emerald-300 rounded-lg p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <p
-                          className="text-xs uppercase tracking-wider text-emerald-700 font-bold mb-1"
-                          style={{ fontFamily: '"Archivo", sans-serif' }}
-                        >
-                          {data.feoOn ? "Additional Memberships" : "Additional Sales"}
-                        </p>
-                        <p
-                          className="text-4xl md:text-5xl text-emerald-800"
-                          style={{
-                            fontFamily: '"JetBrains Mono", monospace',
-                            fontWeight: 600,
-                          }}
-                        >
-                          +{fmt(addedSales)}
-                        </p>
+                    <div className="bg-emerald-50 border border-emerald-300 rounded-lg p-5">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-1">
+                        <div>
+                          <p
+                            className="text-xs uppercase tracking-wider text-emerald-700 font-bold mb-1"
+                            style={{ fontFamily: '"Archivo", sans-serif' }}
+                          >
+                            {data.feoOn ? "Additional Memberships" : "Additional Sales"}
+                          </p>
+                          <p
+                            className="text-4xl md:text-5xl text-emerald-800"
+                            style={{
+                              fontFamily: '"JetBrains Mono", monospace',
+                              fontWeight: 600,
+                            }}
+                          >
+                            +{fmt(addedSales)}
+                          </p>
+                        </div>
+                        <div>
+                          <p
+                            className="text-xs uppercase tracking-wider text-emerald-700 font-bold mb-1"
+                            style={{ fontFamily: '"Archivo", sans-serif' }}
+                          >
+                            Lead-to-Close lift
+                          </p>
+                          <p
+                            className="text-4xl md:text-5xl text-emerald-800"
+                            style={{
+                              fontFamily: '"JetBrains Mono", monospace',
+                              fontWeight: 600,
+                            }}
+                          >
+                            {data.overallRate.toFixed(1)}%
+                            <span className="text-stone-400 mx-1">→</span>
+                            {projected.overallRate.toFixed(1)}%
+                          </p>
+                          <p
+                            className="text-xs text-emerald-700 font-bold mt-1"
+                            style={{ fontFamily: '"Archivo", sans-serif' }}
+                          >
+                            +{addedRate.toFixed(1)} points
+                            {data.overallRate > 0 && (
+                              <span className="text-stone-500 font-normal">
+                                {" · +"}
+                                {(
+                                  ((projected.overallRate - data.overallRate) /
+                                    data.overallRate) *
+                                  100
+                                ).toFixed(0)}
+                                % improvement
+                              </span>
+                            )}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <p
-                          className="text-xs uppercase tracking-wider text-emerald-700 font-bold mb-1"
-                          style={{ fontFamily: '"Archivo", sans-serif' }}
-                        >
-                          Lead-to-Close lift
-                        </p>
-                        <p
-                          className="text-4xl md:text-5xl text-emerald-800"
-                          style={{
-                            fontFamily: '"JetBrains Mono", monospace',
-                            fontWeight: 600,
-                          }}
-                        >
-                          {data.overallRate.toFixed(1)}%
-                          <span className="text-stone-400 mx-1">→</span>
-                          {projected.overallRate.toFixed(1)}%
-                        </p>
-                        <p
-                          className="text-xs text-emerald-700 font-bold mt-1"
-                          style={{ fontFamily: '"Archivo", sans-serif' }}
-                        >
-                          +{addedRate.toFixed(1)} points
-                        </p>
-                      </div>
+
+                      {/* Money side — only when membership price is set */}
+                      {data.membershipPrice > 0 && (
+                        <div className="mt-4 pt-4 border-t border-emerald-200 grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <p
+                              className="text-xs uppercase tracking-wider text-emerald-700 font-bold mb-1"
+                              style={{
+                                fontFamily: '"Archivo", sans-serif',
+                              }}
+                            >
+                              30-Day Cash
+                            </p>
+                            <p
+                              className="text-2xl md:text-3xl text-emerald-800"
+                              style={{
+                                fontFamily: '"JetBrains Mono", monospace',
+                                fontWeight: 600,
+                              }}
+                            >
+                              ${fmt(data.frontEndCash)}{" "}
+                              <span className="text-stone-400 mx-1">→</span>{" "}
+                              ${fmt(projected.frontEndCash)}
+                            </p>
+                            <p
+                              className="text-xs text-emerald-700 font-bold mt-1"
+                              style={{
+                                fontFamily: '"Archivo", sans-serif',
+                              }}
+                            >
+                              +${fmt(projected.frontEndCash - data.frontEndCash)}
+                              {data.frontEndCash > 0 && (
+                                <span className="text-stone-500 font-normal">
+                                  {" · +"}
+                                  {(
+                                    ((projected.frontEndCash -
+                                      data.frontEndCash) /
+                                      data.frontEndCash) *
+                                    100
+                                  ).toFixed(0)}
+                                  % improvement
+                                </span>
+                              )}
+                            </p>
+                          </div>
+                          <div>
+                            <p
+                              className="text-xs uppercase tracking-wider text-emerald-700 font-bold mb-1"
+                              style={{
+                                fontFamily: '"Archivo", sans-serif',
+                              }}
+                            >
+                              Total LTV
+                            </p>
+                            <p
+                              className="text-2xl md:text-3xl text-emerald-800"
+                              style={{
+                                fontFamily: '"JetBrains Mono", monospace',
+                                fontWeight: 600,
+                              }}
+                            >
+                              ${fmt(data.totalLtv)}{" "}
+                              <span className="text-stone-400 mx-1">→</span>{" "}
+                              ${fmt(projected.totalLtv)}
+                            </p>
+                            <p
+                              className="text-xs text-emerald-700 font-bold mt-1"
+                              style={{
+                                fontFamily: '"Archivo", sans-serif',
+                              }}
+                            >
+                              +${fmt(projected.totalLtv - data.totalLtv)}
+                              {data.totalLtv > 0 && (
+                                <span className="text-stone-500 font-normal">
+                                  {" · +"}
+                                  {(
+                                    ((projected.totalLtv - data.totalLtv) /
+                                      data.totalLtv) *
+                                    100
+                                  ).toFixed(0)}
+                                  % improvement
+                                </span>
+                              )}
+                            </p>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
