@@ -40,6 +40,56 @@ const BENCHMARK_TARGETS = {
   leadToClose: 20,
 };
 
+// Churn benchmarks — inverted (lower = better)
+// Green: <= 5%, Yellow: 5–7%, Red: > 7%
+const CHURN_BENCHMARKS = {
+  greenMax: 5,   // <= this = green
+  yellowMax: 7,  // <= this AND > greenMax = yellow; above = red
+  target: 5,     // green ceiling used for projected impact
+};
+const churnHealth = (rate) => {
+  if (rate <= CHURN_BENCHMARKS.greenMax) return "green";
+  if (rate <= CHURN_BENCHMARKS.yellowMax) return "yellow";
+  return "red";
+};
+
+// Churn coaching — copy per band (lower-is-better)
+const churnInsight = (rate) => {
+  const health = churnHealth(rate);
+  const lifetimeMonths = rate > 0 ? (1 / (rate / 100)).toFixed(1) : "—";
+  if (health === "red") {
+    return {
+      severity: "red",
+      headline: "Churn is bleeding LTV",
+      detail: `At ${rate}% monthly churn, the average member lasts roughly ${lifetimeMonths} months. Every percentage point you reduce churn translates straight into LTV. The four places to look first: onboarding consistency in the first 30 days, community/accountability infrastructure in days 30–90, billing failure recovery (cards declining is a silent killer), and a formal 60-day retention check-in with a coach (not a survey).`,
+      tactics: [
+        "Audit the first-30-day experience. New members who don't feel coached out the gate cancel inside 90 days.",
+        "Install a 60-day retention conversation as a calendar-driven SOP. This is the single highest-ROI retention move at this churn level.",
+        "Build a billing failure recovery cadence — failed cards that auto-cancel are pure leakage. Stripe/GHL can dunning these automatically.",
+        "Map the community/accountability touchpoints between days 30 and 90. If there isn't one, that's the gap.",
+      ],
+    };
+  }
+  if (health === "yellow") {
+    return {
+      severity: "yellow",
+      headline: "Churn is workable — but leaving money on the table",
+      detail: `At ${rate}%, average member lifetime is around ${lifetimeMonths} months. The team is keeping members through the early grind, but they're walking off at the 60–90 day mark — the highest-leverage retention window. A formal mid-cycle check-in (with a coach, not a survey) is the single highest-ROI move. Pulling churn down 1–2 points compounds hard on LTV.`,
+      tactics: [
+        "Install a 60-day check-in with a named coach. Calendar-driven, not 'when we remember.'",
+        "Audit billing failure recovery — even one declined-card cancellation per month adds up over a year.",
+        "Look at the day-30 experience. Members who feel coached at the 30-day mark stick.",
+      ],
+    };
+  }
+  return {
+    severity: "green",
+    headline: "Retention is doing its job",
+    detail: `Churn at ${rate}% is healthy — average member lifetime is around ${lifetimeMonths} months. The retention infrastructure is working. At this level, the highest-ROI lever isn't squeezing more out of retention — it's growing the front of the funnel. Protect what's working: keep the onboarding cadence, the community structure, and the check-in rhythm. Don't change a working system.`,
+    tactics: null,
+  };
+};
+
 // ============================================================
 // SPEED-TO-LEAD INSIGHTS (with GMM Follow-Up tactics)
 // ============================================================
@@ -2874,6 +2924,196 @@ export default function CSFunnelCoach() {
                 )}
               </div>
             )}
+
+            {/* RETENTION LEVER — churn coaching with projected LTV impact */}
+            {(() => {
+              const ci = churnInsight(data.churnRate);
+              const ciStyles = SEVERITY_STYLES[ci.severity];
+              // Projected impact: only when there's room to improve AND we have
+              // pricing data to convert into dollars
+              const hasRoomToImprove = data.churnRate > CHURN_BENCHMARKS.target;
+              const hasMoneyMath = data.membershipPrice > 0 && data.sold > 0;
+              const showProjection = hasRoomToImprove && hasMoneyMath;
+              let projection = null;
+              if (showProjection) {
+                const targetChurn = CHURN_BENCHMARKS.target;
+                const targetLtvPerMember =
+                  data.membershipPrice / (targetChurn / 100);
+                const targetTotalLtv = data.sold * targetLtvPerMember;
+                const ltvPerMemberGain =
+                  targetLtvPerMember - data.ltvPerMember;
+                const totalLtvGain = targetTotalLtv - data.totalLtv;
+                const pctLtvGain =
+                  data.totalLtv > 0
+                    ? ((targetTotalLtv - data.totalLtv) / data.totalLtv) * 100
+                    : 0;
+                projection = {
+                  targetChurn,
+                  targetLtvPerMember,
+                  targetTotalLtv,
+                  ltvPerMemberGain,
+                  totalLtvGain,
+                  pctLtvGain,
+                };
+              }
+              return (
+                <div className="relative bg-white rounded-xl shadow-sm border border-slate-200 p-6 md:p-10">
+                  <div className="absolute top-0 left-8 w-1 h-7 bg-blue-700 rounded-b" />
+                  <div className="flex items-center gap-2 mb-3">
+                    <RotateCw
+                      size={16}
+                      strokeWidth={2}
+                      className="text-blue-700"
+                    />
+                    <span
+                      className="text-blue-700 text-xs font-bold uppercase tracking-[0.2em]"
+                      style={{ fontFamily: '"Archivo", sans-serif' }}
+                    >
+                      Retention Lever
+                    </span>
+                  </div>
+
+                  {/* Current value + R/Y/G pill */}
+                  <div className="flex items-baseline flex-wrap gap-3 mb-4">
+                    <span
+                      className="text-4xl md:text-5xl"
+                      style={{
+                        fontFamily: '"JetBrains Mono", monospace',
+                        fontWeight: 600,
+                        color: "#0c1a3d",
+                      }}
+                    >
+                      {data.churnRate}%
+                    </span>
+                    <span
+                      className={`text-xs px-2 py-1 border ${ciStyles.border} ${ciStyles.bg} ${ciStyles.label} font-bold uppercase`}
+                    >
+                      {HEALTH_LABEL[ci.severity]} — Churn
+                    </span>
+                    <span
+                      className="text-xs text-stone-500"
+                      style={{ fontFamily: '"Archivo", sans-serif' }}
+                    >
+                      Targets: Green ≤ {CHURN_BENCHMARKS.greenMax}% · Yellow {CHURN_BENCHMARKS.greenMax}–{CHURN_BENCHMARKS.yellowMax}% · Red &gt; {CHURN_BENCHMARKS.yellowMax}%
+                    </span>
+                  </div>
+
+                  <h2
+                    className="text-2xl md:text-3xl mb-3 uppercase leading-tight"
+                    style={{
+                      fontFamily: '"Big Shoulders Display", sans-serif',
+                      fontWeight: 900,
+                      color: "#0c1a3d",
+                      letterSpacing: "-0.005em",
+                    }}
+                  >
+                    {ci.headline}
+                  </h2>
+                  <p
+                    className="text-base text-stone-700 leading-relaxed mb-4"
+                    style={{ fontFamily: '"Archivo", sans-serif' }}
+                  >
+                    {ci.detail}
+                  </p>
+
+                  {ci.tactics && ci.tactics.length > 0 && (
+                    <ul className="space-y-2 mb-4">
+                      {ci.tactics.map((t, i) => (
+                        <li
+                          key={i}
+                          className="text-sm text-stone-700 leading-relaxed flex gap-2"
+                          style={{ fontFamily: '"Archivo", sans-serif' }}
+                        >
+                          <span className="text-blue-700 font-bold shrink-0">•</span>
+                          <span>{t}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+
+                  {/* Projected Impact (only when there's room and money math works) */}
+                  {showProjection && projection && (
+                    <div className="mt-5 bg-emerald-50 border border-emerald-300 rounded-lg p-5">
+                      <p
+                        className="text-xs uppercase tracking-wider text-emerald-700 font-bold mb-3"
+                        style={{ fontFamily: '"Archivo", sans-serif' }}
+                      >
+                        Projected Impact — Churn from {data.churnRate}% → {projection.targetChurn}%
+                      </p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-2">
+                        <div>
+                          <p
+                            className="text-xs text-stone-600 mb-1"
+                            style={{ fontFamily: '"Archivo", sans-serif' }}
+                          >
+                            LTV per Member
+                          </p>
+                          <p
+                            className="text-2xl text-emerald-800"
+                            style={{
+                              fontFamily: '"JetBrains Mono", monospace',
+                              fontWeight: 600,
+                            }}
+                          >
+                            ${Math.round(data.ltvPerMember).toLocaleString()}{" "}
+                            →{" "}
+                            ${Math.round(projection.targetLtvPerMember).toLocaleString()}
+                          </p>
+                          <p
+                            className="text-xs font-bold text-emerald-700 mt-1"
+                            style={{ fontFamily: '"Archivo", sans-serif' }}
+                          >
+                            +${Math.round(projection.ltvPerMemberGain).toLocaleString()} per member
+                          </p>
+                        </div>
+                        <div>
+                          <p
+                            className="text-xs text-stone-600 mb-1"
+                            style={{ fontFamily: '"Archivo", sans-serif' }}
+                          >
+                            Total LTV (this cohort)
+                          </p>
+                          <p
+                            className="text-2xl text-emerald-800"
+                            style={{
+                              fontFamily: '"JetBrains Mono", monospace',
+                              fontWeight: 600,
+                            }}
+                          >
+                            ${Math.round(data.totalLtv).toLocaleString()} →{" "}
+                            ${Math.round(projection.targetTotalLtv).toLocaleString()}
+                          </p>
+                          <p
+                            className="text-xs font-bold text-emerald-700 mt-1"
+                            style={{ fontFamily: '"Archivo", sans-serif' }}
+                          >
+                            +${Math.round(projection.totalLtvGain).toLocaleString()}{" "}
+                            <span className="text-stone-500 font-normal">
+                              · +{projection.pctLtvGain.toFixed(0)}% improvement
+                            </span>
+                          </p>
+                        </div>
+                      </div>
+                      <p
+                        className="text-xs italic text-stone-600 mt-3"
+                        style={{ fontFamily: '"Archivo", sans-serif' }}
+                      >
+                        That's the LTV math: lower churn extends member lifetime. The current {data.sold.toLocaleString()} {data.feoOn ? "memberships" : "closed"} are worth ${Math.round(projection.totalLtvGain).toLocaleString()} more if you can hold them ${(1 / (projection.targetChurn / 100)).toFixed(1)} months on average instead of {(1 / (data.churnRate / 100)).toFixed(1)}.
+                      </p>
+                    </div>
+                  )}
+
+                  {hasRoomToImprove && !hasMoneyMath && (
+                    <p
+                      className="text-xs italic text-stone-500 mt-3"
+                      style={{ fontFamily: '"Archivo", sans-serif' }}
+                    >
+                      Add a Membership Sale Amount in the Revenue & Retention section to see the dollar impact of fixing churn.
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* BOTTLENECK(S) */}
             {bottlenecks.length > 0 ? (
